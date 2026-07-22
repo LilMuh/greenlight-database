@@ -1,0 +1,10 @@
+databaseChangeLog:
+  - include:
+      file: changes/001-create-watch-config.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/002-create-tee-time.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/003-create-notification-ledger.yaml
+      relativeToChangelogFile: true

@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: greenlight-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-greenlight}
+      POSTGRES_USER: ${POSTGRES_USER:-greenlight}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-greenlight}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-greenlight} -d ${POSTGRES_DB:-greenlight}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: greenlight-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@greenlight.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # One-shot: applies the Liquibase changelog against postgres, then exits.
+  liquibase:
+    image: liquibase/liquibase:4.31
+    container_name: greenlight-liquibase
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./changelog:/liquibase/changelog:ro
+    command:
+      - --search-path=/liquibase/changelog
+      - --changelog-file=db.changelog-master.yaml
+      - --url=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-greenlight}
+      - --username=${POSTGRES_USER:-greenlight}
+      - --password=${POSTGRES_PASSWORD:-greenlight}
+      - update
+
+volumes:
+  pgdata:
