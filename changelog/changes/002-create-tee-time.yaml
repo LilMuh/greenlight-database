@@ -2,7 +2,7 @@ databaseChangeLog:
   - changeSet:
       id: 002-create-tee-time
       author: tom.huang
-      comment: Placeholder table. Columns not finalized yet — flesh out in a later changeset.
+      comment: A scraped tee-time slot's current availability. One row per (source, site, course, date, time, holes, players).
       changes:
         - createTable:
             tableName: tee_time
@@ -14,9 +14,66 @@ databaseChangeLog:
                   constraints:
                     primaryKey: true
                     nullable: false
+              # 来源订位系统，如 "cps"
               - column:
-                  name: created_at
+                  name: source
+                  type: text
+                  constraints:
+                    nullable: false
+              # 站点/子域名，如 "golfvancouver"
+              - column:
+                  name: site
+                  type: text
+                  constraints:
+                    nullable: false
+              # 我们的球场 slug，如 "langara"
+              - column:
+                  name: course_id
+                  type: text
+                  constraints:
+                    nullable: false
+              # 开球日期（DB 用 play_date 避开保留字 date）
+              - column:
+                  name: play_date
+                  type: date
+                  constraints:
+                    nullable: false
+              # 开球时间，球场当地，如 "18:18"（用 time_local 避开保留字 time）
+              - column:
+                  name: time_local
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: holes
+                  type: int
+                  constraints:
+                    nullable: false
+              # 这条可订性是按几人查的
+              - column:
+                  name: players
+                  type: int
+                  constraints:
+                    nullable: false
+              # 单人 green fee，税前
+              - column:
+                  name: price
+                  type: numeric(8, 2)
+              # 是否仍可订；upsert 时把本轮没再看到的旧行置 false
+              - column:
+                  name: available
+                  type: boolean
+                  constraints:
+                    nullable: false
+              # 本行最近一次写入/更新时间
+              - column:
+                  name: updated_at
                   type: timestamptz
                   defaultValueComputed: now()
                   constraints:
                     nullable: false
+        # upsert 键：同一时段唯一。leading play_date 顺带利于按日期查询
+        - addUniqueConstraint:
+            tableName: tee_time
+            constraintName: uq_tee_time_slot
+            columnNames: play_date, source, site, course_id, holes, players, time_local
