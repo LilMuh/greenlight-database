@@ -1,0 +1,68 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-flesh-out-watch-config
+      author: tom.huang
+      comment: A user's alert subscription — notify by email when a matching tee time opens. Fields defined by the frontend Watch Alerts form.
+      changes:
+        - addColumn:
+            tableName: watch_config
+            columns:
+              # 关注的球场 slug 列表，CSV 存一列，如 "fraserview,langara"
+              - column:
+                  name: course_ids
+                  type: text
+                  constraints:
+                    nullable: false
+              # 关注的日期范围（含）
+              - column:
+                  name: date_start
+                  type: date
+                  constraints:
+                    nullable: false
+              - column:
+                  name: date_end
+                  type: date
+                  constraints:
+                    nullable: false
+              # 关注的开球时间段（含），HH:MM，与 tee_time.time_local 同格式便于比较
+              - column:
+                  name: time_start
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: time_end
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: players
+                  type: int
+                  constraints:
+                    nullable: false
+              # 价格上限，加元整数
+              - column:
+                  name: max_price
+                  type: int
+                  constraints:
+                    nullable: false
+              # 命中后通知到这个邮箱
+              - column:
+                  name: email
+                  type: text
+                  constraints:
+                    nullable: false
+              # 是否启用；暂停的关注不参与匹配
+              - column:
+                  name: active
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              # 本行最近一次写入/更新时间
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
