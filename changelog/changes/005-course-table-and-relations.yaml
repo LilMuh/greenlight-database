@@ -1,0 +1,141 @@
+databaseChangeLog:
+  # course 升级为独立表：球场是一等公民，别的表通过数字 id 关联它。
+  # 目录内容由 scraper 抓取时 upsert 维护，新球场自动出现，无需手改列表。
+  - changeSet:
+      id: 005a-create-course
+      author: tom.huang
+      comment: Course as a first-class table. Populated dynamically by the scraper; numeric id is the relation key, slug is the natural business key.
+      changes:
+        - createTable:
+            tableName: course
+            columns:
+              # 自增数字主键，别的表都用它来关联
+              - column:
+                  name: id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              # 球场业务键，如 "fraserview"；scraper 按它 upsert，唯一
+              - column:
+                  name: slug
+                  type: text
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_course_slug
+              # 展示名，如 "Fraserview Golf Course"
+              - column:
+                  name: name
+                  type: text
+                  constraints:
+                    nullable: false
+              # 来源订位系统，如 "cps"
+              - column:
+                  name: source
+                  type: text
+                  constraints:
+                    nullable: false
+              # 站点/子域名，如 "golfvancouver"
+              - column:
+                  name: site
+                  type: text
+                  constraints:
+                    nullable: false
+              # 预留以后扩展：address / phone / booking_url / holes / city / 经纬度…
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+
+  # 用现有 tee_time 里 distinct 出来的 slug 回填 course，保证接下来的外键成立。
+  # 展示名先用 slug 顶着，scraper 下次抓取会把真名 upsert 进来。
+  - changeSet:
+      id: 005b-backfill-course-from-tee-time
+      author: tom.huang
+      comment: Seed course from existing tee_time slugs so the FK is satisfiable; scraper refines names later.
+      changes:
+        - sql:
+            sql: >-
+              INSERT INTO course (slug, name, source, site)
+              SELECT DISTINCT course_id, course_id, source, site FROM tee_time
+              ON CONFLICT (slug) DO NOTHING
+
+  # 把 tee_time.course_id 从 slug 文本迁成数字外键 → course.id。
+  # 唯一约束含 course_id，得先拆、迁完再按新列重建。
+  - changeSet:
+      id: 005c-tee-time-course-fk
+      author: tom.huang
+      comment: Migrate tee_time.course_id from slug text to a numeric FK referencing course.id.
+      changes:
+        # 唯一约束引用了旧的文本 course_id，先拆掉
+        - dropUniqueConstraint:
+            tableName: tee_time
+            constraintName: uq_tee_time_slot
+        # 临时数字列，按 slug 关到 course.id
+        - addColumn:
+            tableName: tee_time
+            columns:
+              - column:
+                  name: course_ref
+                  type: bigint
+        - sql:
+            sql: >-
+              UPDATE tee_time t SET course_ref = c.id
+              FROM course c WHERE c.slug = t.course_id
+        # 换掉旧文本列
+        - dropColumn:
+            tableName: tee_time
+            columnName: course_id
+        - renameColumn:
+            tableName: tee_time
+            oldColumnName: course_ref
+            newColumnName: course_id
+            columnDataType: bigint
+        - addNotNullConstraint:
+            tableName: tee_time
+            columnName: course_id
+            columnDataType: bigint
+        - addForeignKeyConstraint:
+            baseTableName: tee_time
+            baseColumnNames: course_id
+            constraintName: fk_tee_time_course
+            referencedTableName: course
+            referencedColumnNames: id
+        # 按新的数字 course_id 重建唯一约束
+        - addUniqueConstraint:
+            tableName: tee_time
+            constraintName: uq_tee_time_slot
+            columnNames: play_date, source, site, course_id, holes, players, time_local
+
+  # watch_config：一条 watch 只关注一个球场，course_ids(CSV) 换成 course_id 外键。
+  # 多球场由前端批量勾选、后端 loop 生成多条 watch。现有行是测试数据，清掉重建。
+  - changeSet:
+      id: 005d-watch-config-course-fk
+      author: tom.huang
+      comment: One watch = one course. Replace the course_ids CSV column with a numeric course_id FK to course.id.
+      changes:
+        # 旧行是 CSV 测试数据，无法机械拆成单球场 FK 行，直接清空
+        - delete:
+            tableName: watch_config
+        - dropColumn:
+            tableName: watch_config
+            columnName: course_ids
+        - addColumn:
+            tableName: watch_config
+            columns:
+              # 关注的单个球场，指向 course.id
+              - column:
+                  name: course_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+        - addForeignKeyConstraint:
+            baseTableName: watch_config
+            baseColumnNames: course_id
+            constraintName: fk_watch_config_course
+            referencedTableName: course
+            referencedColumnNames: id

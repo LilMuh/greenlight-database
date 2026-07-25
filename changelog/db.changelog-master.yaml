@@ -11,3 +11,9 @@ databaseChangeLog:
   - include:
       file: changes/004-flesh-out-watch-config.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/005-course-table-and-relations.yaml
+      relativeToChangelogFile: true
+  - include:
+      file: changes/006-seed-courses.yaml
+      relativeToChangelogFile: true

@@ -1,0 +1,15 @@
+databaseChangeLog:
+  # course 是参考数据，主人是这里（Liquibase）。scraper / backend 都只读 course。
+  # 以后新增球场：在这里再加一个 seed changeset。幂等 upsert，fresh DB 也能建出这些行。
+  - changeSet:
+      id: 006-seed-courses
+      author: tom.huang
+      comment: Seed the known courses with proper display names. Liquibase owns the course master list; scraper and backend read only.
+      changes:
+        - sql:
+            sql: >-
+              INSERT INTO course (slug, name, source, site) VALUES
+                ('fraserview', 'Fraserview Golf Course', 'cps', 'golfvancouver'),
+                ('langara',    'Langara Golf Course',    'cps', 'golfvancouver'),
+                ('mccleery',   'McCleery Golf Course',   'cps', 'golfvancouver')
+              ON CONFLICT (slug) DO UPDATE SET name = excluded.name, updated_at = now()
