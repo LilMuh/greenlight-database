@@ -1,0 +1,42 @@
+databaseChangeLog:
+  # M3 改模型：不再「按 N 人查可订性」，而是一次查全（numberOfPlayer=0），
+  # 用 available_seats 记录该时段当前真实空位数（CPS 的 maxPlayer，0–4）。
+  # 于是 players 列失去意义（它原本表示「这条是按几人查的」），从表里去掉；
+  # 唯一键也随之去掉 players，一个时段就是一行。
+  - changeSet:
+      id: 007a-tee-time-available-seats
+      author: tom.huang
+      comment: Add available_seats (real open seats per slot). Drop the now-meaningless players column and remove it from the unique key; a slot is one row.
+      changes:
+        # 当前真实空位数：CPS 的 maxPlayer。0 = 满/已下架
+        - addColumn:
+            tableName: tee_time
+            columns:
+              - column:
+                  name: available_seats
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+        # 唯一键含 players，先拆才能删列
+        - dropUniqueConstraint:
+            tableName: tee_time
+            constraintName: uq_tee_time_slot
+        - dropColumn:
+            tableName: tee_time
+            columnName: players
+        # 重建唯一键：一个 (来源, 站点, 球场, 日期, 洞数, 时间) 就是一个时段
+        - addUniqueConstraint:
+            tableName: tee_time
+            constraintName: uq_tee_time_slot
+            columnNames: play_date, source, site, course_id, holes, time_local
+
+  # notification_ledger 原是去重占位表。M3 的去重靠「库里 available_seats 上一轮值 vs 本轮值」
+  # 做上升沿判断（不满足→满足才发），不需要任何账本表，删掉。
+  - changeSet:
+      id: 007b-drop-notification-ledger
+      author: tom.huang
+      comment: Drop notification_ledger. M3 dedup compares available_seats round-over-round in memory; no ledger table needed.
+      changes:
+        - dropTable:
+            tableName: notification_ledger

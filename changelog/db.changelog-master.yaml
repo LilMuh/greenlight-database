@@ -17,3 +17,6 @@ databaseChangeLog:
   - include:
       file: changes/006-seed-courses.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/007-tee-time-available-seats.yaml
+      relativeToChangelogFile: true
