@@ -1,0 +1,35 @@
+databaseChangeLog:
+  # 球场照片：地址跟着 course 走（course 是参考数据，主人在这里）。
+  # 存完整 URL 而不是文件名：以后换图床只改这里的 SQL，前后端代码一行都不用动。
+  - changeSet:
+      id: 008a-course-image-url
+      author: tom.huang
+      comment: Add image_url to course. Nullable; the UI falls back to a placeholder when it is absent or the image fails to load.
+      changes:
+        - addColumn:
+            tableName: course
+            columns:
+              # 照片地址，可空。空 = 前端显示条纹占位
+              - column:
+                  name: image_url
+                  type: text
+
+  # 图片托管在一个公开的 GitHub 仓库，由 jsDelivr 当 CDN 分发，前端不承担流量。
+  # 文件名用 md5(slug)：仓库虽公开，但别人看不出里面存了哪些球场。
+  # 用 slug 不用 name —— name 会被 006 的 seed 和 scraper upsert 覆盖（见 005b 注释），
+  # hash 一变所有图片会静默 404（前端有占位回退，页面不报错，很难发现）。
+  - changeSet:
+      id: 008b-seed-course-images
+      author: tom.huang
+      comment: Point courses without an image at <cdn>/<md5(slug)>.webp. One statement covers all rows regardless of course count.
+      changes:
+        - sql:
+            # 只填空值：新球场自动补上，手工设过特殊地址的行不动，重跑幂等
+            sql: >-
+              UPDATE course SET
+                image_url = 'https://cdn.jsdelivr.net/gh/LilMuh/Demo2@master/_2023.10.07/src/resources/'
+                            || md5(slug) || '.webp',
+                updated_at = now()
+              WHERE image_url IS NULL
+  # 以后新增球场：照抄 008b 再写一个 changeset，语句本身不用改。
+  # 个别球场要用特殊地址：单独 UPDATE 那一行覆盖掉（存完整 URL 就是为了留这个口子）。
