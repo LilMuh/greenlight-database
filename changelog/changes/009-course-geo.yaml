@@ -1,0 +1,48 @@
+databaseChangeLog:
+  # 球场的地址和 Google 评分。scraper 在 /scrape 里顺带刷新（默认 7 天一次）——
+  # 这是 course 表第一次有运行时写入者，在此之前它完全由本仓的 changeset 维护。
+  #
+  # 四列全部可空，而且必须允许长期为空：数据来自解析 Google Maps 页面，
+  # Google 改版式就会取不到。取不到时写 NULL 不写假值，前端据此降级成只显示球场名。
+  - changeSet:
+      id: 009a-course-geo
+      author: tom.huang
+      comment: Add address / rating / rating_count / maps_url to course. All nullable; scraped from Google Maps and refreshed on a staleness check, so absence is a normal steady state.
+      changes:
+        - addColumn:
+            tableName: course
+            columns:
+              # Google 的 formattedAddress，存完整值（"7800 Vivian Dr, Vancouver, BC V5S 2V9, Canada"）。
+              # 前端只显示前两段；完整地址留着以后做导航链接 / 算距离
+              - column:
+                  name: address
+                  type: text
+              # Google 星级，0.0–5.0，一位小数（页面上就是一位）
+              - column:
+                  name: rating
+                  type: numeric(2, 1)
+              # 评价条数，前端显示成 "(1,330)"
+              - column:
+                  name: rating_count
+                  type: integer
+              # 首次解析到的 Google Maps 地点链接（/maps/place/...）。
+              # 存下来之后每次刷新直接导航过去，不再走搜索——既省一次跳转，
+              # 也避免某次搜索静默匹配到隔壁的商户（数据看着正常，其实是别人的地址）
+              - column:
+                  name: maps_url
+                  type: text
+
+  # 刷新判据用的索引。course 只有个位数行，这个索引现在纯属多余，
+  # 但 scraper 每轮抓取都会跑这个 where，球场数涨起来之后它就有意义了。
+  # 之所以现在加：加列的 changeset 和它配套的索引放一起，比事后补一个 010 好找。
+  - changeSet:
+      id: 009b-course-geo-staleness-index
+      author: tom.huang
+      comment: Index the staleness predicate the scraper runs every round (address IS NULL OR updated_at older than the cutoff).
+      changes:
+        - createIndex:
+            tableName: course
+            indexName: idx_course_updated_at
+            columns:
+              - column:
+                  name: updated_at
