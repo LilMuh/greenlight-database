@@ -1,0 +1,30 @@
+databaseChangeLog:
+  # watch 从「日期区间」改成「星期」：人关注的是「每个周六早上」，不是 8/13–8/20 这一段。
+  # 区间是会过期的——填的那几天一过就作废，得回来重填；星期长期成立，建一次一直有效。
+  # 抓取窗口本来也只有今天起 8 天，区间比这更长的部分从来就没被用上过。
+  #
+  # 现有行直接清掉：date_start/date_end 机械换算成星期只会得出一堆没人想要的组合
+  # （填了整段暑假的会变成七天全选），与其猜不如让人重新建一条。参照 005d 的做法。
+  - changeSet:
+      id: 010-watch-config-weekdays
+      author: tom.huang
+      comment: Replace the watch date range with a weekday set. A watch means "every Saturday morning", not a one-off date span; the 8-day scrape horizon turns each weekday back into concrete dates. Existing rows are dropped rather than guessed at.
+      changes:
+        - delete:
+            tableName: watch_config
+        - addColumn:
+            tableName: watch_config
+            columns:
+              # 关注的星期，CSV 存一列，如 "SAT,SUN"。取值 MON/TUE/WED/THU/FRI/SAT/SUN，
+              # 按 ISO 顺序排（周一在前、周日在后），写入和读出都是这个序
+              - column:
+                  name: weekdays
+                  type: text
+                  constraints:
+                    nullable: false
+        - dropColumn:
+            tableName: watch_config
+            columnName: date_start
+        - dropColumn:
+            tableName: watch_config
+            columnName: date_end
