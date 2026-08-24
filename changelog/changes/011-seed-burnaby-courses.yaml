@@ -1,0 +1,35 @@
+databaseChangeLog:
+  # Golf Burnaby（golfburnaby.cps.golf）的两个球场。和 006 一样是参考数据，主人在这里。
+  #
+  # slug 是业务键，一旦定下就别改：tee_time 靠它解析 course_id，008b 的图片地址是 md5(slug)。
+  # 名字写全名（"Riverway Golf Course"）而不是站点响应里的短名（"Riverway"）——
+  # 前端和邮件都显示这一列，Google Maps 也拿它去搜地址，全名匹配得准。
+  - changeSet:
+      id: 011a-seed-burnaby-courses
+      author: tom.huang
+      comment: Seed the two Golf Burnaby courses. Same idempotent upsert as 006; scraper and backend read course only.
+      changes:
+        - sql:
+            sql: >-
+              INSERT INTO course (slug, name, source, site) VALUES
+                ('burnaby-mountain', 'Burnaby Mountain Golf Course', 'cps', 'golfburnaby'),
+                ('riverway',         'Riverway Golf Course',         'cps', 'golfburnaby')
+              ON CONFLICT (slug) DO UPDATE SET name = excluded.name, updated_at = now()
+
+  # 给上面两行补图片地址。语句和 008b 一字不差（只填 NULL 的行），
+  # 所以 008b 已经处理过的老球场不受影响，重跑也幂等。
+  - changeSet:
+      id: 011b-seed-burnaby-course-images
+      author: tom.huang
+      comment: Point the new Burnaby rows at <cdn>/<md5(slug)>.webp, reusing 008b's statement verbatim.
+      changes:
+        - sql:
+            sql: >-
+              UPDATE course SET
+                image_url = 'https://cdn.jsdelivr.net/gh/LilMuh/Demo2@master/_2023.10.07/src/resources/'
+                            || md5(slug) || '.webp',
+                updated_at = now()
+              WHERE image_url IS NULL
+  # 注意：图床上要真有 md5(slug).webp 才显示得出来，否则前端落到条纹占位。
+  #   riverway         → 3d1eda01aad9bf67f77b92800734184e.webp
+  #   burnaby-mountain → 832d2bd8cdffa49a8802a03922416625.webp
