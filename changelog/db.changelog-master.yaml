@@ -32,3 +32,6 @@ databaseChangeLog:
   - include:
       file: changes/011-seed-burnaby-courses.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/012-watch-config-unique-email-course.yaml
+      relativeToChangelogFile: true

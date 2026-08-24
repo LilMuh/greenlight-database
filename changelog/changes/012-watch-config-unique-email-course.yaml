@@ -1,0 +1,47 @@
+databaseChangeLog:
+  # 一条 watch 的业务身份是 (邮箱, 球场)：同一个人在同一个球场只该有一条。
+  #
+  # 后端已经在 WatchConfigService 里做了 upsert（已有就改、没有才建），但那是
+  # find-then-save：两个请求同时查、都没查到、都插入，照样能塞进两条重复行。
+  # 约束才是唯一真正成立的保证，也挡得住绕过后端直接写库的情况。
+  #
+  # 重复的后果不是报错而是骚扰：同一个空位会按重复的条数发出好几封一模一样的邮件，
+  # 而界面上只是多了几行长得一样的记录，很难联想到根因。
+
+  # 邮箱先规范化。后端从此只写 lower(trim(email))，历史行得跟上，
+  # 否则 "Tom@X.com" 和 "tom@x.com" 会被约束当成两个人放过去。
+  - changeSet:
+      id: 012a-normalize-watch-config-email
+      author: tom.huang
+      comment: Normalize watch_config.email to trimmed lowercase so the uniqueness check treats one inbox as one person.
+      changes:
+        - sql:
+            sql: >-
+              UPDATE watch_config SET email = lower(trim(email))
+              WHERE email <> lower(trim(email))
+
+  # 规范化之后可能撞出重复行，先清掉再加约束。同组保留 id 最大的那条——
+  # id 最大 = 最后一次提交，也就是这个人最近一次表达的意图。
+  # （写这个 changeset 时线上并没有重复行，但它得在任何一份库上都能跑通。）
+  - changeSet:
+      id: 012b-dedupe-watch-config
+      author: tom.huang
+      comment: Drop duplicate (email, course_id) rows, keeping the newest, so the unique constraint can be added.
+      changes:
+        - sql:
+            sql: >-
+              DELETE FROM watch_config older
+              USING watch_config newer
+              WHERE older.email = newer.email
+                AND older.course_id = newer.course_id
+                AND older.id < newer.id
+
+  - changeSet:
+      id: 012c-watch-config-unique-email-course
+      author: tom.huang
+      comment: One watch per (email, course). The app upserts on this key; the constraint is what makes it actually hold.
+      changes:
+        - addUniqueConstraint:
+            tableName: watch_config
+            constraintName: uq_watch_config_email_course
+            columnNames: email, course_id
