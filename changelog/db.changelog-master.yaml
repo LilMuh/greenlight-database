@@ -35,3 +35,6 @@ databaseChangeLog:
   - include:
       file: changes/012-watch-config-unique-email-course.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/013-seed-wcgg-courses.yaml
+      relativeToChangelogFile: true

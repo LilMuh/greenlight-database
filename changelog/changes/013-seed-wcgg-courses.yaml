@@ -1,0 +1,47 @@
+databaseChangeLog:
+  # West Coast Golf Group（westcoastgolfgroup.cps.golf，官网 wcgg.ca）的球场。
+  # 和 006 / 011 一样是参考数据，主人在这里。
+  #
+  # 三处物业，四行：Swaneset 在 CPS 站点里是两条各自有 courseId 的 18 洞球道
+  # （Resort / Links），订位时分开选，所以我们也分开当两个球场收。
+  # courseId 是 2026-09-03 从站点 OnlineCourses 响应实测抄的，见 scraper 的
+  # WestCoastGolfGroupCourseId。
+  #
+  # slug 是业务键，一旦定下就别改：tee_time 靠它解析 course_id，013b 的图片地址是 md5(slug)。
+  # 名字这次统一去掉末尾的 "Course"（"Swaneset Resort" 而不是站点响应里的 "Swaneset Resort
+  # Course"）。和 006 / 011 那五个球场不一致是知情的选择——name 只是展示列，被下面这条
+  # 幂等 upsert 拥有，什么时候想统一都能改；slug 才是改不动的那一列。
+  - changeSet:
+      id: 013a-seed-wcgg-courses
+      author: tom.huang
+      comment: Seed the four West Coast Golf Group courses. Same idempotent upsert as 006/011; scraper and backend read course only.
+      changes:
+        - sql:
+            sql: >-
+              INSERT INTO course (slug, name, source, site) VALUES
+                ('hazelmere',       'Hazelmere Golf',  'cps', 'westcoastgolfgroup'),
+                ('belmont',         'Belmont Golf',    'cps', 'westcoastgolfgroup'),
+                ('swaneset-resort', 'Swaneset Resort', 'cps', 'westcoastgolfgroup'),
+                ('swaneset-links',  'Swaneset Links',  'cps', 'westcoastgolfgroup')
+              ON CONFLICT (slug) DO UPDATE SET name = excluded.name, updated_at = now()
+
+  # 给上面四行补图片地址。语句和 008b 一字不差（只填 NULL 的行），
+  # 所以 008b / 011b 已经处理过的老球场不受影响，重跑也幂等。
+  - changeSet:
+      id: 013b-seed-wcgg-course-images
+      author: tom.huang
+      comment: Point the new WCGG rows at <cdn>/<md5(slug)>.webp, reusing 008b's statement verbatim.
+      changes:
+        - sql:
+            sql: >-
+              UPDATE course SET
+                image_url = 'https://cdn.jsdelivr.net/gh/LilMuh/Demo2@master/_2023.10.07/src/resources/'
+                            || md5(slug) || '.webp',
+                updated_at = now()
+              WHERE image_url IS NULL
+  # 注意：图床上要真有 md5(slug).webp 才显示得出来，否则前端落到条纹占位。
+  # 这四张目前【还没传】，落占位是预期状态，不是 bug。
+  #   hazelmere       → eeaac36c398134ddb231c304869ab48a.webp
+  #   belmont         → 34b6af73ced35f83e3d459b27e520cab.webp
+  #   swaneset-resort → 790229ddbc99627fd4723770d482d0fd.webp
+  #   swaneset-links  → fe9bc68d1a1a61ffe5ac02a4e59bac67.webp
