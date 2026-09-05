@@ -1,0 +1,38 @@
+databaseChangeLog:
+  # Kings Links（kingslinks.cps.golf，Delta）。和 006 / 011 / 013 一样是参考数据，主人在这里。
+  #
+  # 一个站点一个球场，所以只有一行。courseId 是 2026-09-05 从站点 OnlineCourses 响应实测
+  # 抄的，见 scraper 的 KingsLinksCourseId。
+  #
+  # slug 是业务键，一旦定下就别改：tee_time 靠它解析 course_id，014b 的图片地址是 md5(slug)。
+  # 名字存 "Kings Links"，也就是订位站点和它的时段响应给的那个名。Google Maps 上的全称是
+  # "Kings Links by the Sea"，但 2026-09-05 实测只搜 "Kings Links" 一样唯一命中 Delta 那家
+  # （3388 72 St，4.2★），所以没必要为了搜得准去写一个站点上根本不出现的名字。
+  - changeSet:
+      id: 014a-seed-kingslinks-course
+      author: tom.huang
+      comment: Seed the single Kings Links course. Same idempotent upsert as 006/011/013; scraper and backend read course only.
+      changes:
+        - sql:
+            sql: >-
+              INSERT INTO course (slug, name, source, site) VALUES
+                ('kings-links', 'Kings Links', 'cps', 'kingslinks')
+              ON CONFLICT (slug) DO UPDATE SET name = excluded.name, updated_at = now()
+
+  # 给上面那行补图片地址。语句和 008b 一字不差（只填 NULL 的行），
+  # 所以 008b / 011b / 013b 已经处理过的老球场不受影响，重跑也幂等。
+  - changeSet:
+      id: 014b-seed-kingslinks-course-image
+      author: tom.huang
+      comment: Point the new Kings Links row at <cdn>/<md5(slug)>.webp, reusing 008b's statement verbatim.
+      changes:
+        - sql:
+            sql: >-
+              UPDATE course SET
+                image_url = 'https://cdn.jsdelivr.net/gh/LilMuh/Demo2@master/_2023.10.07/src/resources/'
+                            || md5(slug) || '.webp',
+                updated_at = now()
+              WHERE image_url IS NULL
+  # 注意：图床上要真有 md5(slug).webp 才显示得出来，否则前端落到条纹占位。
+  # 这张目前【还没传】，落占位是预期状态，不是 bug。
+  #   kings-links → 960b9bfc600e7639085c9d34aaa80728.webp
