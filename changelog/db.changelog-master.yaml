@@ -41,3 +41,6 @@ databaseChangeLog:
   - include:
       file: changes/014-seed-kingslinks-course.yaml
       relativeToChangelogFile: true
+  - include:
+      file: changes/015-course-maintenance.yaml
+      relativeToChangelogFile: true

@@ -1,0 +1,53 @@
+databaseChangeLog:
+  # 维护中：上游站点抓不动时，把整个球场先摘出去。
+  #
+  # 起因是 golfburnaby.cps.golf 会给我们的指纹浏览器弹 Club Prophet 的人机验证页
+  # （标题 "Just a moment..."，搜索页本身 403），SPA 根本不加载，也就没人去发那个
+  # TeeTimes 请求，scraper 只能等满 45 秒抛「等待 TeeTimes 响应超时」。
+  # 同一时刻同一个 profile 打开 golfvancouver 却一切正常，所以不是我们这边坏了。
+  #
+  # 状态放在 course 而不是配置文件里：course 是参考数据，主人本来就在 Liquibase，
+  # 前端要显示「维护中」也得从 /api/courses 拿得到这个字段。
+  - changeSet:
+      id: 015a-course-maintenance
+      author: tom.huang
+      comment: Add maintenance to course. Courses flagged here are shown as under maintenance and cannot be watched.
+      changes:
+        - addColumn:
+            tableName: course
+            columns:
+              # 维护中 = 前端置灰不让关注，后端拒绝任何会让它的 watch 生效的写入
+              - column:
+                  name: maintenance
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+  # 按 site 打标而不是按 slug：整站抓不动是常态（验证、改版、域名换证），
+  # 一条语句覆盖该站点下所有球场，以后再加 Burnaby 的球场也自动带上。
+  - changeSet:
+      id: 015b-flag-burnaby-in-maintenance
+      author: tom.huang
+      comment: Flag every golfburnaby course as under maintenance; its tee sheet is behind a human-verification page.
+      changes:
+        - sql:
+            sql: >-
+              UPDATE course SET maintenance = true, updated_at = now()
+              WHERE site = 'golfburnaby' AND NOT maintenance
+
+  # 打标的同时把存量 watch 停掉，两件事必须在同一次迁移里做完。
+  # 没有后台管理界面，维护状态本来就是靠改库设的；分成两步靠人记得去停，
+  # 漏一次的代价是每轮抓取白等 45 秒 × 该站点的 job 数，而且日志里只是 error=N，
+  # 界面上那几条 watch 看着还在生效。
+  - changeSet:
+      id: 015c-deactivate-watches-in-maintenance
+      author: tom.huang
+      comment: Pause watches on courses under maintenance. They would never fire anyway; leaving them active only burns scrape time.
+      changes:
+        - sql:
+            sql: >-
+              UPDATE watch_config SET active = false, updated_at = now()
+              WHERE active AND course_id IN (SELECT id FROM course WHERE maintenance)
+  # 维护结束：写一个新的 changeset 把 maintenance 置回 false。
+  # watch 不自动开回来——是不是还想要，由用户自己决定。
